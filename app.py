@@ -52,9 +52,9 @@ def detect():
     prediction = seg.predict_segmentation(image_path, seg_model, image_processor)
     seg.visualize_segmentation(image_path, prediction, latest_result)
 
-    distance = seg.get_vehicle_distance(seg_model, image_processor)
+    distance, count = seg.get_vehicle_distance(seg_model, image_processor)
     filtered_results = []
-    print(f'🫡 Distance: {distance}')
+    print(f'🫡 Distance: {distance} / Count: {count}')
 
     return (filtered_results), 200
 

@@ -246,10 +246,12 @@ def get_vehicle_distance(seg_model, image_processor):
     masked_depth_map = cv2.bitwise_and(depth_map, depth_map, mask=combined_mask)
 
     distance = np.mean(masked_depth_map[masked_depth_map != 0])
+    print(masked_depth_map.shape)
+    count = len(masked_depth_map[masked_depth_map != 0])
 
     for item in left_items:
         os.remove(os.path.join(left_dir, item))
     for item in right_items:
         os.remove(os.path.join(right_dir, item))
 
-    return distance
+    return distance, count

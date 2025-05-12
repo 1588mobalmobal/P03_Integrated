@@ -54,17 +54,17 @@ class Ballistics:
         distance = self.context.shared_data["distance"]
         if self.context.EFFECTIVE_MIN_RANGE <= distance <= self.context.EFFECTIVE_MAX_RANGE:
             # 포신 각도를 회귀식을 통해 구하기기
-            if not (20.995 <= distance <= 137.68):
-                raise ValueError("Distance is outside the inverse function's domain [20.995, 137.68].")
+            # if not (20.995 <= distance <= 137.68):
+            #     raise ValueError("Distance is outside the inverse function's domain [20.995, 137.68].")
 
             # 원 회귀식의 역함수
-            discriminant = 1.492 * distance - 24.564784
-            if discriminant < 0:
-                raise ValueError("Discriminant is negative. No real solutions exist.")
+            discriminant = 1.492 * distance - 24.264784
+            # if discriminant < 0:
+            #     raise ValueError("Discriminant is negative. No real solutions exist.")
 
             barrel_angle_deg = (-5.914 + math.sqrt(discriminant)) / 0.746  # In degrees
-            if not (-5.0 + 1e-6 <= barrel_angle_deg <= 10.0 + 1e-6):
-                raise ValueError("Calculated barrel angle is outside the range [-5, 10].")
+            # if not (-5.0 + 1e-6 <= barrel_angle_deg <= 10.0 + 1e-6):
+            #     raise ValueError("Calculated barrel angle is outside the range [-5, 10].")
 
             # Convert barrel angle to radians (for error calculation)
             barrel_angle = barrel_angle_deg * math.pi / 180
@@ -76,7 +76,9 @@ class Ballistics:
 
             return barrel_angle, barrel_angle_error
         else:
-            raise ValueError("Distance exceeds effective range")
+            # raise ValueError("Distance exceeds effective range")
+            print('Out of the range')
+            return 0, 0
 
 class AimingBehavior:
     def __init__(self, context):

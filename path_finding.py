@@ -446,4 +446,4 @@ class NavigationController:
 
         # HTML 파일로 저장 (Plotly JS를 포함)
         fig.write_html("path_visualization.html", include_plotlyjs='cdn', full_html=True)
-        print("Visualization saved as path_visualization.html")
+        # print("Visualization saved as path_visualization.html")
