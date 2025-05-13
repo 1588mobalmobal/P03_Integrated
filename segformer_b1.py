@@ -13,6 +13,8 @@ import torch.nn.functional as F
 import albumentations as A
 from transformers import SegformerForSemanticSegmentation, SegformerImageProcessor
 
+from sklearn.cluster import DBSCAN
+
 
 class_mapping = {
     0 :'void',
@@ -229,7 +231,7 @@ def get_vehicle_distance(seg_model, image_processor):
     # disparity_visual = cv2.normalize(disparity, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8U)
 
     # 5. 깊이 맵 계산
-    focal_length = 1050  # 초점 거리 (픽셀 단위, 예시 값)
+    focal_length = 1080  # 초점 거리 (픽셀 단위, 예시 값)
     baseline = 1        # 기본선 거리 (미터 단위, 예시 값)
     depth_map = np.zeros_like(disparity)
     valid_disparity = disparity > 0.1  # 유효한 시차만 선택
@@ -245,13 +247,32 @@ def get_vehicle_distance(seg_model, image_processor):
     combined_mask = cv2.bitwise_and(mask_left, mask_right)  # 좌/우 공통 영역
     masked_depth_map = cv2.bitwise_and(depth_map, depth_map, mask=combined_mask)
 
-    distance = np.mean(masked_depth_map[masked_depth_map != 0])
-    print(masked_depth_map.shape)
-    count = len(masked_depth_map[masked_depth_map != 0])
+    pixel_coords = np.where(combined_mask == 1)
+    pixel_coords = np.column_stack((pixel_coords[0], pixel_coords[1]))
 
     for item in left_items:
         os.remove(os.path.join(left_dir, item))
     for item in right_items:
         os.remove(os.path.join(right_dir, item))
 
-    return distance, count
+    if len(pixel_coords) < 128 :
+        return None 
+
+    db = DBSCAN(eps=5.0, min_samples=64, metric='euclidean').fit(pixel_coords)
+    labels = db.labels_
+    n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
+    result = []
+
+    output_mask = np.zeros_like(combined_mask, dtype=np.uint8)
+    for cluster_id in range(n_clusters):
+        cluster_pixels = pixel_coords[labels == cluster_id]
+        for x, y in cluster_pixels:
+            output_mask[x, y] = masked_depth_map[x, y]
+        distance = output_mask[output_mask != 0].mean()
+        if np.isnan(distance):
+            return None
+        # print(f"자동차 {cluster_id + 1}: {len(cluster_pixels)} 픽셀")
+        # print(f"자동차 {cluster_id + 1}: {distance} 거리")
+        result.append({'pixels': len(cluster_pixels), 'distance' : distance, 'id': cluster_id})
+
+    return result

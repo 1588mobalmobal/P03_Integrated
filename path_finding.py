@@ -138,7 +138,7 @@ class Pathfinding:
 @dataclass
 class NavigationConfig:
     MOVE_STEP: float = 0.1
-    TOLERANCE: float = 15.0
+    TOLERANCE: float = 8.0
     LOOKAHEAD_MIN: float = 1.0
     LOOKAHEAD_MAX: float = 10.0
     HEADING_SMOOTHING: float = 0.8
@@ -228,7 +228,7 @@ class NavigationController:
                     self.completed = True
                 curr_x, curr_z = self.current_position
                 self.initial_distance = math.sqrt((x - curr_x) ** 2 + (z - curr_z) ** 2)
-            print(f"Waypoints set: {self.waypoints}")
+            # print(f"Waypoints set: {self.waypoints}")
             # 시각화 호출
             self.visualize_path()
             return {
