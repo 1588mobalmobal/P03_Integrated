@@ -277,4 +277,4 @@ def get_action():
         return jsonify({"turret": turret_rotate, "weight": 0.3})
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5052, debug=True)
+    app.run(host='0.0.0.0', port=5055, debug=True)

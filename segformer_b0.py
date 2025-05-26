@@ -2,6 +2,8 @@ import os
 import time
 import shutil
 import numpy as np
+import matplotlib
+# matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 
@@ -130,9 +132,7 @@ def init_model():
             new_state_dict[key] = value
     model.load_state_dict(new_state_dict)
     model.to(device)
-    # model.eval()  # 추론 모드 활성화
     print('😊 Segformer_b0 has been Initialized!!💙')
-    # print(preprocessor.__dict__)
     return model, preprocessor
 
 def predict_segmentation(image_path, model, preprocessor):
@@ -143,14 +143,8 @@ def predict_segmentation(image_path, model, preprocessor):
     with torch.no_grad():
         outputs = model(pixel_values=pixel_values)
         logits = outputs.logits  # [1, 25, H, W]
-        # probs = torch.softmax(logits, dim=1)
-        # print(f"Probs shape: {probs.shape}")  # [batch_size, 25, 512, 512]
-        # for class_idx in range(14):
-        #     class_prob = probs[0, class_idx, 0, 0]  # 첫 번째 픽셀의 클래스별 확률
-        #     print(f"Class {class_idx} probability: {class_prob.item()}")
         predictions = torch.argmax(logits, dim=1).cpu().numpy()  # [1, 512, 512]
         prediction = predictions[0]
-    
     return prediction
 
 
@@ -164,7 +158,7 @@ def visualize_segmentation(image_path, prediction, output_path):
     color_array = np.array([class_to_rgb_map.get(i, (0, 0, 0)) for i in range(14)], dtype=np.uint8)
     seg_map = color_array[prediction]
 
-    cv2.imwrite(output_path, seg_map)
+    # cv2.imwrite(output_path, seg_map)
 
     # unique_classes = np.unique(prediction)
     # legend_elements = [
