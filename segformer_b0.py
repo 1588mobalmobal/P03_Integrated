@@ -190,6 +190,17 @@ def get_item_dir(from_dir):
     item_dir = os.path.join(from_dir, item)
     return items, item_dir
 
+def detect_vehicle(seg_model, image_processor, img_path):
+    prediction = predict_segmentation(img_path, seg_model, image_processor)
+    seg_mask_resized = cv2.resize(prediction.astype(np.uint8), (512, 512), interpolation=cv2.INTER_NEAREST)
+    target_class = 7
+    mask = (seg_mask_resized == target_class).astype(np.uint8)
+    non_zero = mask[mask != 0]
+    pixels = len(non_zero)
+    return pixels
+
+
+
 
 def get_vehicle_distance(seg_model, image_processor):
     left_items, left_item_dir = get_item_dir(left_dir)

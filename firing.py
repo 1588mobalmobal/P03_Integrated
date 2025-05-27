@@ -180,7 +180,7 @@ class TurretControl:
                     else:
                         direction = "getFire"
                         # print(f"🛠️ Command: {direction}")
-                        return self.context.input_key_value[direction]
+                        return self.context.input_key_value[direction], 1.0
                 self.previous_play_time = self.context.shared_data["time"]
             # print("⏭️ No update, returning None")
             return None
