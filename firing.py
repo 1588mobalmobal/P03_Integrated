@@ -58,7 +58,7 @@ class Ballistics:
             #     raise ValueError("Distance is outside the inverse function's domain [20.995, 137.68].")
 
             # 원 회귀식의 역함수
-            discriminant = 1.492 * distance - 24.564784 # 기존 회기식에 대한 역함수의 상수를를 -26.564784에서 -24.564784로 변경(더 높은 사거리 선정을 위해해)
+            discriminant = 1.492 * distance - 20.564784 # 기존 회기식에 대한 역함수의 상수를를 -26.564784에서 -24.564784로 변경(더 높은 사거리 선정을 위해해)
             # if discriminant < 0:
             #     raise ValueError("Discriminant is negative. No real solutions exist.")
 
@@ -157,8 +157,8 @@ class TurretControl:
             if self.previous_play_time < self.context.shared_data["time"]:
                 self.target_vector, self.heading_error, self.barrel_angle, self.barrel_angle_error = self.aiming_behavior.control_information()
                 # print(f"🔄 Updated - Heading Error: {self.heading_error}, Barrel Angle Error: {self.barrel_angle_error}")
-                turret_weight = min(max(abs(self.heading_error) / math.pi, 0.1), 1)
-                barrel_weight = min(max(abs(self.barrel_angle_error) / math.pi, 0.1), 1)
+                turret_weight = min(max(abs(self.heading_error) / math.pi, 0.05), 0.5)
+                barrel_weight = min(max(abs(self.barrel_angle_error) / math.pi, 0.1), 0.5)
                 # print(f"⚖️ Turret Weight: {turret_weight}, Barrel Weight: {barrel_weight}")
                 if abs(self.heading_error) > self.tolerance:
                     direction = "getRight" if self.heading_error > 0 else "getLeft"
@@ -180,7 +180,7 @@ class TurretControl:
                     else:
                         direction = "getFire"
                         # print(f"🛠️ Command: {direction}")
-                        return self.context.input_key_value[direction], 1.0
+                        return self.context.input_key_value[direction], 0.5
                 self.previous_play_time = self.context.shared_data["time"]
             # print("⏭️ No update, returning None")
             return None
@@ -190,7 +190,7 @@ class ToleranceCalculator:
         self.context = context
         self.distance = self.context.shared_data.get("distance")  # 안전한 get 사용
         self.max_tolerance = self.context.MAX_TOLERANCE  # 0.05235988
-        self.min_tolerance = self.context.MIN_TOLERANCE  # 0.01745329
+        self.min_tolerance = self.context.MIN_TOLERANCE # 0.01745329
         self.max_distance = self.context.EFFECTIVE_MAX_RANGE  # 115.8
         self.min_distance = self.context.EFFECTIVE_MIN_RANGE  # 21.002
 

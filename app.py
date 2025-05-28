@@ -30,8 +30,11 @@ WORLD_SIZE = 300  # 300x300 미터
 # 적 감지 여부
 enemy_detected = False
 enemy_suspected = False
+ready_to_attack = False
+attack_confirmed = False
 detected_buffer = 0
 enemy_list = []
+preemptive_strike = False
 
 # 초기화
 grid = pf.Grid(width=WORLD_SIZE, height=WORLD_SIZE)
@@ -82,28 +85,27 @@ def detect():
 
     image = request.files.get('image')
     if not image:
+        print('no image received')
         return jsonify({"error": "No image received"}), 400
 
     image_path = './static/source/temp_image.jpg'
     image.save(image_path)
+    print('temp image saved')
 
     pixels = seg.detect_vehicle(seg_model, image_processor, image_path)
     if pixels > 500:
         enemy_suspected = True
-        detected_buffer += 1
         print(f'enemy suspected')
     else:
-        detected_buffer  = max(detected_buffer - 1, 0)
         enemy_suspected = False
-    if detected_buffer > 3:
-        enemy_detected = True
+    if enemy_suspected:
         enemy_list = seg.get_vehicle_distance(seg_model, image_processor)
         if enemy_list == None:
             enemy_list = []
-        print(f'enemy detected / {enemy_list}')
-    else:
-        enemy_detected = False
-        enemy_list = []
+            enemy_detected = False
+        else:
+            enemy_detected = True
+            print(f'enemy detected / {enemy_list}')
 
     filtered_results = []
 
@@ -187,13 +189,13 @@ def get_move():
     global destination_buffer
     global step_counter
     step_counter += 1
-    if enemy_detected:
+    if enemy_detected and preemptive_strike:
         weight = 0.1
         data = shared_data.get_data()
         enemies = len(enemy_list)
         if enemies == 0:
             print('enemy detected but enemy list is empty')
-            return jsonify({"move": "W", 'weight': 0.1})
+            return jsonify({"move": "STOP", 'weight': weight})
         if enemies > 0:
             # 사정거리 안에 있으면 그 자리에서 멈춰서 쏘자
             distance = enemy_list[0]['distance']
@@ -249,59 +251,16 @@ def get_move():
         #         return jsonify(command)
     else:
         command = nav_controller.get_move()
-        if enemy_suspected:
-            command['weight'] = 0.2
+        if enemy_suspected and preemptive_strike:
+            command['weight'] = 0.05
             print(f'Enemy suspected. Moving Command: {command}')
         else:
             print(f'No Enemy. Moving Command: {command}')
         return jsonify(command)
 
-@app.route('/api/data', methods=['GET'])
-def get_data():
-    global destination, enemy_detected, trail
-    data = shared_data.get_data()
-    if not data:
-        return jsonify({"status": "ERROR", "message": "No data available"}), 503
-
-    sensor_data = {
-        'x': data['playerPos']['x'],
-        'y': data['playerPos']['y'],
-        'z': data['playerPos']['z'],
-        'speed': data['playerSpeed'],
-        'e_x': data['enemyPos']['x'],
-        'e_y': data['enemyPos']['y'],
-        'e_z': data['enemyPos']['z']
-    }
-    destination_data = {'d_x': destination[0], 'd_z': destination[1]} if destination else {'d_x': None, 'd_z': None}
-    enemy_data = {'detected': enemy_detected}
-
-    return jsonify({
-        'sensor_data': sensor_data,
-        'destination_data': destination_data,
-        'enemy_data': enemy_data,
-        'trail': trail
-    })
-
-@app.route('/visualization', methods=['GET'])
-def get_visualization():
-    return render_template("visualization.html")  # 데이터는 클라이언트에서 API로 가져옴
-
-@app.route('/update_goal', methods=['POST'])
-def set_goal():
-    global destination
-    data = request.get_json()
-    x = data['x']
-    z = 300 - data['z']
-    destination = [x, z]
-    result = nav_controller.set_destination(f'{x},10,{z}')
-    print(result)
-    return jsonify({'result': 'success'}), 200
-
-
 @app.route('/get_action', methods=['GET'])
 def get_action():
-    global enemy_detected
-    global enemy_suspected
+    global enemy_detected, enemy_suspected ,ready_to_attack
     global turret_rotate
     global enemy_list
     data = shared_data.get_data()
@@ -312,7 +271,7 @@ def get_action():
         turret_rotate = 'Q'
     elif heading < -30:
         turret_rotate = 'E'
-    if enemy_detected:
+    if enemy_detected and preemptive_strike:
         enemies = len(enemy_list)
         if enemies == 0:
             print('enemy detected but enemy list is empty')
@@ -325,6 +284,14 @@ def get_action():
             if result == None:
                 return jsonify({"turret": "", "weight": 0.0})
             command = {"turret": result[0], "weight": result[1]}
+            if command['turret'] == 'FIRE':
+                ready_to_attack = True
+            else:
+                ready_to_attack = False
+            if command['turret'] == 'FIRE' and not(attack_confirmed):
+                command['turret'] = 'Q'
+                command['weight'] = 0.0
+                print('Attack not comfirmed')
             if command:
                 print(f"🔫 Action Command: {command}")
                 return jsonify(command)
@@ -342,6 +309,7 @@ def init():
     global rng
     global final_destination
     global is_env_start
+    global trail
 
     with threading_lock:
         while True:
@@ -374,7 +342,70 @@ def init():
         }
         print("🛠️ Initialization config sent via /init:", config["blStartX"], config["blStartZ"], config["rdStartX"], config["rdStartZ"])
         is_env_start = False
+        trail = []
     return jsonify(config)
+
+
+@app.route('/api/data', methods=['GET'])
+def get_data():
+    data = shared_data.get_data()
+    if not data:
+        return jsonify({"status": "ERROR", "message": "No data available"}), 503
+
+    sensor_data = {
+        'x': data['playerPos']['x'],
+        'y': data['playerPos']['y'],
+        'z': data['playerPos']['z'],
+        'speed': data['playerSpeed'],
+        'e_x': data['enemyPos']['x'],
+        'e_y': data['enemyPos']['y'],
+        'e_z': data['enemyPos']['z']
+    }
+    destination_data = {'d_x': destination[0], 'd_z': destination[1]} if destination else {'d_x': None, 'd_z': None}
+    enemy_data = {'detected': enemy_detected}
+
+    return jsonify({
+        'sensor_data': sensor_data,
+        'destination_data': destination_data,
+        'enemy_data': enemy_data,
+        'trail': trail,
+        'ready' : ready_to_attack,
+        'preemptive' : preemptive_strike
+    })
+
+@app.route('/api/confirm', methods=['POST'])
+def confirm_action():
+    global attack_confirmed
+    attack_confirmed = True
+    print('attack confirmed :', attack_confirmed)
+    return jsonify({"status": "SUCCESS", "confirmed": attack_confirmed})
+
+@app.route('/api/deny', methods=['POST'])
+def deny_action():
+    global attack_confirmed
+    attack_confirmed = False
+    print('attack confirmed :', attack_confirmed)
+    return jsonify({"status": "SUCCESS", "confirmed": attack_confirmed})
+
+
+@app.route('/visualization', methods=['GET'])
+def get_visualization():
+    return render_template("visualization.html")  # 데이터는 클라이언트에서 API로 가져옴
+
+@app.route('/update_goal', methods=['POST'])
+def set_goal():
+    global destination
+    global preemptive_strike
+    data = request.get_json()
+    print(data)
+    x = data['x']
+    z = 300 - data['z']
+    preemptive_strike = data['preemptive']
+    destination = [x, z]
+    result = nav_controller.set_destination(f'{x},10,{z}')
+    print(result)
+    return jsonify({'result': 'success'}), 200
+
 
 @app.route('/start', methods=['GET'])
 def start():

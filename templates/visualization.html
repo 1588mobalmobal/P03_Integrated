@@ -6,95 +6,192 @@
     <title>맵 시각화 및 조작 패널</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        /* Custom styles */
-        .visualization-container {
-            max-width: 1600px; /* Overall container for 900px map + 700px panel */
-            margin-left: auto;
-            margin-right: auto;
+        /* 테마: 그래파이트 배경 */
+        body {
+            background-color: #2B2F38; /* 그래파이트 계열 */
+            color: #D9E1E8; /* 텍스트 색상, 티타늄 크롬과 조화 */
         }
+
+        /* 중앙 정렬 및 티타늄 크롬 스타일 */
+        .visualization-container {
+            max-width: 1600px; /* 900px 맵 + 700px 패널 */
+            min-height: 100vh; /* 화면 높이 전체 사용 */
+            display: flex;
+            align-items: center; /* 세로 중앙 */
+            justify-content: center; /* 가로 중앙 */
+            margin: 0 auto;
+        }
+
+
 
         #myCanvas {
-            border: 1px solid black;
-            display: block; /* Prevents bottom margin/space */
-        }
-
-        #coordinates {
-            margin-top: 8px;
-            font-family: Arial, sans-serif;
+            border: 1px solid #D9E1E8; /* 티타늄 크롬 테두리 */
+            display: block;
+            background-color: #D9E1E8; /* 티타늄 크롬 배경 */
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* 광택 효과 */
         }
 
         #map-area {
-            /* col-lg-auto will size this based on the 900px canvas */
+            background-color: #D9E1E8; /* 티타늄 크롬 */
+            padding: 15px;
+            border: 4px solid #C0C8D0; /* 약간 어두운 티타늄 톤 */
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: center;
+            align-items: center;
         }
 
         #panel-area {
-            /* This column (col-lg) will take up remaining space.
-               If .visualization-container is 1600px and map-area is 900px, this gets 700px. */
+            background-color: #D9E1E8; /* 티타늄 크롬 */
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
         }
 
         #controlPanel {
             height: 900px;
-            border: 1px solid #dee2e6; /* Bootstrap subtle border */
+            border: 1px solid #C0C8D0; /* 약간 어두운 티타늄 톤 */
             padding: 15px;
-            background-color: #f8f9fa; /* Light background */
+            background-color: whitesmoke; /* 티타늄 크롬 */
             box-sizing: border-box;
-            width: 100%; /* Fill its column */
+            width: 100%;
+            margin-top: 20px; /* 상하 마진 */
+            margin-bottom: 20px;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
 
         #controlPanel img {
             width: 100%;
             height: auto;
             display: block;
+            border-radius: 4px;
         }
 
-        /* Responsive adjustments for stacking columns below lg breakpoint */
+        .image-container {
+            position: relative;
+        }
+
+        .loading-spinner {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #fff;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 4px;
+        }
+
+        /* 맵 선택 버튼 */
+        .btn-group {
+            display: flex;
+            justify-content: center; /* 가운데 정렬 */
+            width: 100%; /* 가로 100% */
+            margin-bottom: 15px;
+        }
+
+        .btn-group .btn {
+            flex: 1; /* 버튼들이 동일한 너비로 확장 */
+            margin: 0 5px; /* 버튼 간 간격 */
+        }
+
+        /* 하얀 Div로 감싼 명령/알림 영역 */
+        .command-alert-wrapper {
+            background-color: #FFFFFF; /* 하얀 배경 */
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-bottom: 15px;
+            height: 100%;
+            width: 100%;
+        }
+
+        .alert {
+            margin-bottom: 0; /* wrapper 내에서 마진 제거 */
+        }
+
+        /* 텍스트 색상 조정 */
+        h4, .alert-heading {
+            color: #2B2F38; /* 그래파이트 톤으로 가독성 유지 */
+        }
+
+        #coordinates {
+            color: #2B2F38;
+        }
+
+        /* 반응형 조정 */
         @media (max-width: 991.98px) {
+            .visualization-container {
+                flex-direction: column; /* 세로로 쌓임 */
+                padding: 20px;
+            }
             #map-area {
-                margin-bottom: 1rem; /* Space between stacked map and panel */
-                overflow-x: auto; /* Ensure canvas can be scrolled if viewport is too narrow */
-                display: flex; /* Used to center the canvas */
-                justify-content: center; /* Center the canvas if map-area is wider than canvas */
+                margin-bottom: 20px;
+                overflow-x: auto;
+                display: flex;
+                justify-content: center;
             }
             #panel-area {
-                /* Panel will naturally take full width when stacked */
+                width: 100%;
             }
             #controlPanel {
-                height: auto; /* Allow height to adjust to content when stacked */
+                height: auto;
+                margin-top: 10px;
+                margin-bottom: 10px;
+                background-color: white;
             }
-            #coordinates {
-                text-align: center; /* Center coordinates text when stacked */
+            .btn-group {
+                flex-direction: column; /* 작은 화면에서 버튼 세로 정렬 */
+            }
+            .btn-group .btn {
+                margin: 5px 0;
             }
         }
     </style>
 </head>
 <body>
-    <div class="container visualization-container mt-3">
+    <div class="container visualization-container">
         <div class="row">
             <!-- Left Column: Map Area -->
-            <div class="col-lg-auto" id="map-area">
+            <div class="col-lg-auto " id="map-area">
                 <canvas id="myCanvas" width="900" height="900"></canvas>
-                <div id="coordinates" class="text-lg-start">클릭한 좌표: (x: 0, z: 0)</div>
             </div>
 
             <!-- Right Column: Control Panel Area -->
             <div class="col-lg" id="panel-area">
                 <div id="controlPanel">
                     <div class="image-container">
-                    <img id="controlImage" src="{{ url_for('static', filename='source/temp_image.jpg') }}" alt="Simulator Image" style="width: 100%; max-height: 500px; object-fit: contain;">
-                    <div class="loading-spinner" style="display: none;">Loading...</div>
-                </div>
-                <h4>조작 패널</h4>
-                <!-- 맵 선택 버튼 그룹 -->
-                <div class="btn-group mb-3" role="group" aria-label="Map selection">
-                    <button type="button" class="btn btn-outline-primary map-btn" data-map="mountain.png">Mountain</button>
-                    <button type="button" class="btn btn-outline-primary map-btn" data-map="country_road.png">Country road</button>
-                    <button type="button" class="btn btn-outline-primary map-btn" data-map="wilderness_dry.png">Wilderness dry</button>
-                    <button type="button" class="btn btn-outline-primary map-btn" data-map="simple_flat.png">Simple flat</button>
-                </div>
-                <!-- 동작 버튼 그룹 -->
-                <div>
-                <button type="button" class="btn btn-primary w-100 mb-2">동작 1</button>
-                <button type="button" class="btn btn-secondary w-100">동작 2</button>
+                        <img id="controlImage" src="{{ url_for('static', filename='source/temp_image.jpg') }}" alt="Simulator Image" style="width: 100%; max-height: 500px; object-fit: contain;">
+                        <div class="loading-spinner" style="display: none;">Loading...</div>
+                    </div>
+                    
+                    <div class="mt-3">
+                        <p class="fs-2 fw-bold text-black">Control Panel</p>
+                    </div>
+                    <!-- 맵 선택 버튼 그룹 -->
+                    <div class="btn-group mb-3" role="group" aria-label="Map selection">
+                        <button type="button" class="btn btn-outline-secondary map-btn fs-4" data-map="mountain.png">Mountain</button>
+                        <button type="button" class="btn btn-outline-secondary map-btn fs-4" data-map="country_road.png">Country</button>
+                        <button type="button" class="btn btn-outline-secondary map-btn fs-4" data-map="wilderness_dry.png">Wilderness</button>
+                        <button type="button" class="btn btn-outline-secondary map-btn fs-4" data-map="simple_flat.png">Flat</button>
+                    </div>
+                    <!-- 현재 명령과 지휘 알림을 하얀 Div로 감쌈 -->
+                    <div class="command-alert-wrapper">
+                        <div id="commandDiv" class="alert alert-success">
+                            <h5 class="alert-heading fs-4 fw-bold">현재 명령</h5>
+                            <div id="coordinates" class="text-lg-start fs-4">명령 대기 중..</div>
+                        </div>
+                        <div id="permissionRequest" class="alert alert-warning" style="display: none;">
+                            <h5 class="alert-heading fs-4 fw-bold">지휘 알림</h5>
+                            <p id="permissionText" class="fs-4">적 전차 탐지. 공격 준비를 완료했습니다.</p>
+                            <button id="confirmBtn" type="button" class="btn btn-success">공격</button>
+                            <button id="denyBtn" type="button" class="btn btn-secondary">중단</button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -105,6 +202,11 @@
         const canvas = document.getElementById('myCanvas');
         const ctx = canvas.getContext('2d');
         const coordDisplay = document.getElementById('coordinates');
+        const controlPanelImg = document.querySelector('#controlPanel img');
+        const permissionRequestDiv = document.getElementById('permissionRequest');
+        const permissionText = document.getElementById('permissionText');
+        const confirmBtn = document.getElementById('confirmBtn');
+        const denyBtn = document.getElementById('denyBtn');
 
         // 맵 이미지 목록
         const mapImages = [
@@ -115,17 +217,17 @@
         ];
         // 현재 선택된 맵 이미지
         let currentMapImage = new Image();
-        currentMapImage.src = mapImages[0].src; // 초기 맵
+        currentMapImage.src = mapImages[0].src;
 
         // 이미지 로드
-        const img = new Image();
         const img2 = new Image();
-        img.src = '../static/source/simple_flat.png'; // 맵 이미지
+        const img3 = new Image();
         img2.src = 'https://cdn-icons-png.flaticon.com/512/854/854884.png';
+        img3.src = 'https://cdn-icons-png.flaticon.com/128/4321/4321639.png';
 
         // 캔버스 그리기 함수
         function drawCanvas(data) {
-            const { sensor_data, destination_data, enemy_data, trail } = data;
+            const { sensor_data, destination_data, enemy_data, trail, preemptive } = data;
             const m_x = sensor_data['x'];
             const m_z = sensor_data['z'];
             const e_x = sensor_data['e_x'];
@@ -133,132 +235,55 @@
             const d_x = destination_data['d_x'];
             const d_z = destination_data['d_z'];
 
-            console.log(m_x, m_z, e_x, e_z, d_x, d_z)
-
-            // 캔버스 초기화
             ctx.clearRect(0, 0, 900, 900);
             ctx.drawImage(currentMapImage, 0, 0, 900, 900);
-            ctx.strokeStyle = 'black';
+            ctx.strokeStyle = '#2B2F38'; /* 그래파이트 테두리 */
             ctx.strokeRect(0, 0, 900, 900);
 
-            // 플레이어 (파란색)
             ctx.fillStyle = 'blue';
             ctx.fillRect(m_x * 3, 900 - m_z * 3, 20, 20);
 
-            // 적 (빨간색)
             ctx.fillStyle = 'red';
             ctx.fillRect(e_x * 3, 900 - e_z * 3, 20, 20);
 
-            // 목적지 (깃발)
             if (d_x !== null && d_z !== null) {
-                ctx.drawImage(img2, d_x * 3, 900 - d_z * 3, 30, 30);
+                if (preemptive) {
+                    ctx.drawImage(img3, d_x * 3, 900 - d_z * 3, 30, 30);
+                } else {
+                    ctx.drawImage(img2, d_x * 3, 900 - d_z * 3, 30, 30);
+                }
             }
 
-            // 이동 경로 (녹색 점)
             trail.forEach(element => {
                 ctx.fillStyle = 'green';
                 ctx.fillRect(element[0] * 3, 900 - element[1] * 3, 5, 5);
             });
         }
 
-        // 초기 데이터로 캔버스 그리기
-        img.onload = function () {
-            // 초기 데이터 가져오기
-            fetch('http://localhost:5055/api/data')
-                .then(response => response.json())
-                .then(data => {
-                    drawCanvas(data);
-                    // 주기적 갱신 시작
-                    setInterval(() => {
-                        fetch('http://localhost:5055/api/data')
-                            .then(response => response.json())
-                            .then(data => drawCanvas(data))
-                            .catch(error => console.error('Error:', error));
-                    }, 500);
-                })
-                .catch(error => console.error('Error:', error));
-        };
-
-        img.onerror = function () {
-            console.error('이미지 로드 실패');
-            ctx.fillStyle = 'white';
-            ctx.fillRect(0, 0, 900, 900);
-            ctx.strokeStyle = 'black';
-            ctx.strokeRect(0, 0, 900, 900);
-        };
-
-        // 좌클릭 이벤트
-        canvas.addEventListener('click', (event) => {
-            const rect = canvas.getBoundingClientRect();
-            const x = Math.round(event.clientX - rect.left);
-            const z = Math.round(event.clientY - rect.top);
-            if (event.button === 0) {
-                const xNew = x / 3;
-                const zNew = z / 3;
-                coordDisplay.textContent = `(x: ${xNew.toFixed(1)}, z: ${zNew.toFixed(1)})`;
-            }
-        });
-
-        // 우클릭 이벤트
-        canvas.addEventListener('contextmenu', (event) => {
-            event.preventDefault();
-            const rect = canvas.getBoundingClientRect();
-            const x = Math.round(event.clientX - rect.left);
-            const z = Math.round(event.clientY - rect.top);
-            const xNew = x / 3;
-            const zNew = z / 3;
-            coordDisplay.textContent = `move (x: ${xNew.toFixed(1)}, z: ${zNew.toFixed(1)})`;
-            const coord = { 'x': xNew, 'z': zNew };
-
-            fetch('http://localhost:5055/update_goal', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(coord),
-            })
-                .then(response => response.json())
-                .then(data => {
-                    console.log('Goal updated:', data);
-                    // 즉시 캔버스 갱신
-                    fetch('http://localhost:5055/api/data')
-                        .then(response => response.json())
-                        .then(data => drawCanvas(data))
-                        .catch(error => console.error('Error:', error));
-                })
-                .catch(error => console.error('Error:', error));
-        });
-
-        // 맵 선택 버튼 이벤트
-        document.querySelectorAll('.map-btn').forEach(button => {
-            button.addEventListener('click', () => {
-                const mapSrc = button.getAttribute('data-map');
-                changeMap(`/static/source/${mapSrc}`);
-                // 선택된 버튼 강조 (옵션)
-                document.querySelectorAll('.map-btn').forEach(btn => btn.classList.remove('active'));
-                button.classList.add('active');
-            });
-        });
-
-        const controlPanelImg = document.querySelector('#controlPanel img');
-
-        // 이미지 갱신 함수
+        // 컨트롤 패널 이미지 갱신
         function updateControlPanelImage() {
-            const timestamp = new Date().getTime(); // 캐싱 방지용 타임스탬프
-            controlPanelImg.src = `/static/source/temp_image.jpg?t=${timestamp}`;
+            const timestamp = new Date().getTime();
+            const newImg = new Image();
+            newImg.src = `/static/source/temp_image.jpg?t=${timestamp}`;
+            newImg.onload = () => {
+                controlPanelImg.src = newImg.src;
+            };
+            newImg.onerror = () => {
+                console.error('컨트롤 패널 이미지 로드 실패');
+            };
         }
 
-        // 0.5초마다 이미지 갱신
-        setInterval(updateControlPanelImage, 250);
-
-        // 초기 이미지 로드
-        updateControlPanelImage();
+        // ready 상태 업데이트
+        function updatePermissionRequest(ready) {
+            permissionRequestDiv.style.display = ready ? 'block' : 'none';
+        }
 
         // 맵 변경 함수
         function changeMap(mapSrc) {
             const newMapImage = new Image();
             newMapImage.src = mapSrc;
             newMapImage.onload = () => {
-                currentMapImage = newMapImage; // 새로운 맵 이미지로 교체
-                // 현재 데이터로 즉시 캔버스 갱신
+                currentMapImage = newMapImage;
                 fetch('http://localhost:5055/api/data')
                     .then(response => {
                         if (!response.ok) throw new Error('데이터 가져오기 실패');
@@ -271,12 +296,151 @@
             };
             newMapImage.onerror = () => {
                 console.error('맵 이미지 로드 실패:', mapSrc);
-                ctx.fillStyle = 'white';
+                ctx.fillStyle = '#D9E1E8';
                 ctx.fillRect(0, 0, 900, 900);
-                ctx.strokeStyle = 'black';
+                ctx.strokeStyle = '#2B2F38';
                 ctx.strokeRect(0, 0, 900, 900);
             };
         }
+
+        // 초기 로드
+        currentMapImage.onload = function () {
+            fetch('http://localhost:5055/api/data')
+                .then(response => response.json())
+                .then(data => {
+                    drawCanvas(data);
+                    updateControlPanelImage();
+                    updatePermissionRequest(data.ready);
+                    setInterval(() => {
+                        fetch('http://localhost:5055/api/data')
+                            .then(response => {
+                                if (!response.ok) throw new Error('데이터 가져오기 실패');
+                                return response.json();
+                            })
+                            .then(data => {
+                                drawCanvas(data);
+                                updateControlPanelImage();
+                                updatePermissionRequest(data.ready);
+                            })
+                            .catch(error => console.error('Error:', error));
+                    }, 500);
+                })
+                .catch(error => console.error('Error:', error));
+        };
+
+        currentMapImage.onerror = function () {
+            console.error('초기 맵 이미지 로드 실패');
+            ctx.fillStyle = '#D9E1E8';
+            ctx.fillRect(0, 0, 900, 900);
+            ctx.strokeStyle = '#2B2F38';
+            ctx.strokeRect(0, 0, 900, 900);
+        };
+
+        // 맵 선택 버튼 이벤트
+        document.querySelectorAll('.map-btn').forEach(button => {
+            button.addEventListener('click', () => {
+                const mapSrc = button.getAttribute('data-map');
+                changeMap(`/static/source/${mapSrc}`);
+                document.querySelectorAll('.map-btn').forEach(btn => btn.classList.remove('active'));
+                button.classList.add('active');
+            });
+        });
+
+        // 확인 버튼 이벤트
+        confirmBtn.addEventListener('click', () => {
+            permissionRequestDiv.classList.remove('alert-warning');
+            permissionRequestDiv.classList.add('alert-danger');
+            permissionText.textContent = '공격을 허가합니다.';
+            fetch('http://localhost:5055/api/confirm', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ confirmed: true })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Confirmed:', data);
+                    permissionRequestDiv.style.display = 'none';
+                })
+                .catch(error => console.error('Error:', error));
+        });
+
+        // 중지 버튼 이벤트
+        denyBtn.addEventListener('click', () => {
+            permissionRequestDiv.classList.remove('alert-danger');
+            permissionRequestDiv.classList.add('alert-warning');
+            permissionText.textContent = '공격 허가를 취소합니다.';
+            fetch('http://localhost:5055/api/deny', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ confirmed: false })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Confirmed:', data);
+                    permissionRequestDiv.style.display = 'none';
+                })
+                .catch(error => console.error('Error:', error));
+        });
+
+        // 좌클릭 이벤트
+        canvas.addEventListener('click', (event) => {
+            event.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            const x = Math.round(event.clientX - rect.left);
+            const z = Math.round(event.clientY - rect.top);
+            const xNew = x / 3;
+            const zNew = z / 3;
+            coordDisplay.textContent = `목표 지점 (x: ${xNew.toFixed(1)}, z: ${zNew.toFixed(1)}) 이동 중`;
+            const coord = { 'x': xNew, 'z': zNew, 'preemptive': false };
+
+            fetch('http://localhost:5055/update_goal', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(coord),
+            })
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Goal updated:', data);
+                    fetch('http://localhost:5055/api/data')
+                        .then(response => response.json())
+                        .then(data => drawCanvas(data))
+                        .catch(error => console.error('Error:', error));
+                })
+                .catch(error => console.error('Error:', error));
+        });
+
+        // 우클릭 이벤트
+        canvas.addEventListener('contextmenu', (event) => {
+            event.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            const x = Math.round(event.clientX - rect.left);
+            const z = Math.round(event.clientY - rect.top);
+            const xNew = x / 3;
+            const zNew = z / 3;
+            coordDisplay.textContent = `타격 지점 (x: ${xNew.toFixed(1)}, z: ${zNew.toFixed(1)}) 이동 간 탐지 중`;
+            const coord = { 'x': xNew, 'z': zNew, 'preemptive': true };
+
+            fetch('http://localhost:5055/update_goal', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(coord),
+            })
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Goal updated:', data);
+                    fetch('http://localhost:5055/api/data')
+                        .then(response => response.json())
+                        .then(data => drawCanvas(data))
+                        .catch(error => console.error('Error:', error));
+                })
+                .catch(error => console.error('Error:', error));
+        });
+
+        // 0.5초마다 이미지 갱신
+        setInterval(updateControlPanelImage, 250);
+
+        // 초기 이미지 로드
+        updateControlPanelImage();
     </script>
 </body>
 </html>
