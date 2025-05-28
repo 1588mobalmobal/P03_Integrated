@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>로딩 중</title>
+    <style>
+        body {
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #f0f0f0;
+            font-family: Arial, sans-serif;
+        }
+        .loading-text {
+            font-size: 2rem;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="loading-text" id="loadingText">로딩 중</div>
+    <script>
+        const loadingText = document.getElementById('loadingText');
+        const states = ['로딩 중.', '로딩 중..', '로딩 중...'];
+        let index = 0;
+
+        setInterval(() => {
+            loadingText.textContent = states[index];
+            index = (index + 1) % states.length;
+        }, 500);
+    </script>
+</body>
+</html>

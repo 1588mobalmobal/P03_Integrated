@@ -193,7 +193,7 @@ def get_move():
         enemies = len(enemy_list)
         if enemies == 0:
             print('enemy detected but enemy list is empty')
-            return jsonify({"move": "W", 'weight': 0.6})
+            return jsonify({"move": "W", 'weight': 0.1})
         if enemies > 0:
             # 사정거리 안에 있으면 그 자리에서 멈춰서 쏘자
             distance = enemy_list[0]['distance']
@@ -256,30 +256,35 @@ def get_move():
             print(f'No Enemy. Moving Command: {command}')
         return jsonify(command)
 
+@app.route('/api/data', methods=['GET'])
+def get_data():
+    global destination, enemy_detected, trail
+    data = shared_data.get_data()
+    if not data:
+        return jsonify({"status": "ERROR", "message": "No data available"}), 503
+
+    sensor_data = {
+        'x': data['playerPos']['x'],
+        'y': data['playerPos']['y'],
+        'z': data['playerPos']['z'],
+        'speed': data['playerSpeed'],
+        'e_x': data['enemyPos']['x'],
+        'e_y': data['enemyPos']['y'],
+        'e_z': data['enemyPos']['z']
+    }
+    destination_data = {'d_x': destination[0], 'd_z': destination[1]} if destination else {'d_x': None, 'd_z': None}
+    enemy_data = {'detected': enemy_detected}
+
+    return jsonify({
+        'sensor_data': sensor_data,
+        'destination_data': destination_data,
+        'enemy_data': enemy_data,
+        'trail': trail
+    })
+
 @app.route('/visualization', methods=['GET'])
 def get_visualization():
-    global destination
-    global enemy_suspected
-    global enemy_detected
-    print(trail)
-    data = shared_data.get_data()
-    x = data['playerPos']['x']
-    y = data['playerPos']['y']
-    z = data['playerPos']['z']
-    speed = data['playerSpeed']
-    e_x = data['enemyPos']['x']
-    e_y = data['enemyPos']['y']
-    e_z = data['enemyPos']['z']
-    sensor_data = {'x': x, 'y': y, 'z': z, 'speed': speed, 'e_x': e_x, 'e_y': e_y, 'e_z': e_z}
-    if destination:
-        destination_data = {'d_x': destination[0], 'd_z': destination[1]}
-    else:
-        destination_data = {'d_x': None, 'd_z': None}
-    enemy_data = {'detected': enemy_detected}
-    try:
-        return render_template("visualization.html", sensor_data=sensor_data, destination_data=destination_data, enemy_data=enemy_data, trail = trail)
-    except FileNotFoundError:
-        return jsonify({"status": "ERROR", "message": "Visualization file not found. Please set a destination first."}), 404
+    return render_template("visualization.html")  # 데이터는 클라이언트에서 API로 가져옴
 
 @app.route('/update_goal', methods=['POST'])
 def set_goal():
@@ -300,12 +305,19 @@ def get_action():
     global turret_rotate
     global enemy_list
     data = shared_data.get_data()
+    turret_x = change_degree(data['playerTurretX'])
+    body_x =  change_degree(data['playerBodyX'])
+    heading = turret_x - body_x
+    if heading > 30:
+        turret_rotate = 'Q'
+    elif heading < -30:
+        turret_rotate = 'E'
     if enemy_detected:
         enemies = len(enemy_list)
         if enemies == 0:
             print('enemy detected but enemy list is empty')
-            return jsonify({"turret": "", "weight": 0.0})
-        if enemies == 1:
+            return jsonify({"turret": turret_rotate, "weight": 0.1})
+        if enemies > 0:
             data['distance'] = enemy_list[0].get('distance')
             context = fire.Initialize(data)
             turret = fire.TurretControl(context)
@@ -323,13 +335,6 @@ def get_action():
             weight = 0.1
         else:
             weight = 0.2
-        turret_x = change_degree(data['playerTurretX'])
-        body_x =  change_degree(data['playerBodyX'])
-        heading = turret_x - body_x
-        if heading > 30:
-            turret_rotate = 'Q'
-        elif heading < -30:
-            turret_rotate = 'E'
         return jsonify({"turret": turret_rotate, "weight": weight})
 
 @app.route('/init', methods=['GET'])
