@@ -103,8 +103,8 @@ rgb_to_class_map = {
 directory = os.getcwd()
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-left_dir = '/mnt/c/Users/kbh11/OneDrive/Documents/Tank Challenge/capture_images/L'
-right_dir = '/mnt/c/Users/kbh11/OneDrive/Documents/Tank Challenge/capture_images/R'
+left_dir = '/mnt/c/Users/kbh11/Documents/Tank Challenge/capture_images/L'
+right_dir = '/mnt/c/Users/kbh11/Documents/Tank Challenge/capture_images/R'
 result_dir = "results"
 
 def init_model():

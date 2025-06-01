@@ -1,19 +1,21 @@
 from flask import Flask, request, jsonify, send_file, render_template
 import os
-import cv2
-import shutil
-import matplotlib.pyplot as plt
-from PIL import Image
-import segformer_b0 as seg
-import path_finding as pf
-import firing as fire
-from utils import shared_data
 import threading
 import math
 import numpy as np
 import threading
 
+import segformer_b0 as seg
+import path_finding as pf
+import ppo
+import firing as fire
+from utils import shared_data
+from collections import deque
+import torch
+
 app = Flask(__name__)
+
+data_stack = deque()
 
 # Segmentation 모델 선언
 seg_model, image_processor = seg.init_model()
@@ -36,6 +38,15 @@ detected_buffer = 0
 enemy_list = []
 preemptive_strike = False
 
+# 강화학습 모델 사용 시
+use_reinforecement_model = True
+device = None
+model = None
+env = None
+command_to_number = {'W': 0, 'S' : 1, 'A': 2, 'D': 3}
+number_to_command = {0: 'W', 1 : 'S', 2: 'A', 3: 'D'}
+weight_bins = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1. ]
+
 # 초기화
 grid = pf.Grid(width=WORLD_SIZE, height=WORLD_SIZE)
 pathfinding = pf.Pathfinding()
@@ -50,7 +61,7 @@ latest_result = os.path.join(result_dir, "latest_result.png")
 # 평시 정찰 코드
 turret_rotate = 'Q'
 
-# destination 공유 코등
+# destination 공유 코드
 destination = None
 destination_buffer = 0
 trail = []
@@ -59,6 +70,12 @@ rng = np.random.default_rng(3)
 
 # 각도 변환용
 def change_degree(my_d):
+    sin = np.sin(np.deg2rad(my_d))
+    cos = np.cos(np.deg2rad(my_d))
+
+    return sin, cos
+
+def change_turret_degree(my_d):
     if my_d > 180:
         direction = -(360-my_d)
     else:
@@ -90,7 +107,6 @@ def detect():
 
     image_path = './static/source/temp_image.jpg'
     image.save(image_path)
-    print('temp image saved')
 
     pixels = seg.detect_vehicle(seg_model, image_processor, image_path)
     if pixels > 500:
@@ -187,76 +203,128 @@ def get_move():
     global enemy_suspected
     global enemy_list
     global destination_buffer
+    global destination
     global step_counter
+    sim_data = shared_data.get_data()
     step_counter += 1
-    if enemy_detected and preemptive_strike:
-        weight = 0.1
-        data = shared_data.get_data()
-        enemies = len(enemy_list)
-        if enemies == 0:
-            print('enemy detected but enemy list is empty')
-            return jsonify({"move": "STOP", 'weight': weight})
-        if enemies > 0:
-            # 사정거리 안에 있으면 그 자리에서 멈춰서 쏘자
-            distance = enemy_list[0]['distance']
-            if distance < 105:
-                print('enemy in range. tank stop')
-                return jsonify({"move": "STOP", 'weight': weight})
-            else:
-                x = data['playerPos']['x']
-                y = data['playerPos']['y']
-                z = data['playerPos']['z']
-                turret_x = data['playerTurretX']
-                enemy_x, enemy_z = get_target_coord(x, z, turret_x, distance)
-                if destination_buffer == 0:
-                    nav_controller.set_destination(f'{enemy_x},{y},{enemy_z}')
-                    print(f'Destination has been changed: {enemy_x},{y},{enemy_z}')
-                    destination_buffer += 1
-                else:
-                    destination_buffer += 1
-                    if destination_buffer > 64:
-                        destination_buffer = 0
-                command = nav_controller.get_move()
-                command['weight'] = weight
-                print('enemy detected but out of range.')
-                return jsonify(command)
-        # else:
-        #     target_id = 0
-        #     target_distance = 1000
-        #     for i, enemy in enumerate(enemy_list):
-        #         if enemy.get['distance'] < target_distance:
-        #             target_id = i
-        #                 # 사정거리 안에 있으면 그 자리에서 멈춰서 쏘자
-        #     distance = enemy_list[target_id]['distance']
-        #     if distance < 100:
-        #         print('Stop the tank')
-        #         return jsonify({"move": "STOP", 'weight': weight})
-        #     else:
-        #         x = data['playerPos']['x']
-        #         y = data['playerPos']['y']
-        #         z = data['playerPos']['z']
-        #         turret_x = data['playerTurretX']
-        #         enemy_x, enemy_z = get_target_coord(x, z, turret_x, distance)
-        #         if destination_buffer == 0:
-        #             nav_controller.set_destination(f'{enemy_x},{y},{enemy_z}')
-        #             print(f'Destination has been changed: {enemy_x},{y},{enemy_z}')
-        #             destination_buffer += 1
-        #         else:
-        #             destination_buffer += 1
-        #             if destination_buffer > 32:
-        #                 destination_buffer = 0
-        #         command = nav_controller.get_move()
-        #         command['weight'] = weight
-        #         print(f'Moving Command: {command}')
-        #         return jsonify(command)
-    else:
-        command = nav_controller.get_move()
-        if enemy_suspected and preemptive_strike:
-            command['weight'] = 0.05
-            print(f'Enemy suspected. Moving Command: {command}')
+    # 강화학습 모델 사용 시 
+    if use_reinforecement_model:
+        x, y, z = sim_data['playerPos']['x'], sim_data['playerPos']['y'], sim_data['playerPos']['z']
+        speed, t_x, t_y  = sim_data['playerSpeed'], sim_data['playerTurretX'], sim_data['playerTurretY']
+        b_x, b_y, b_z = sim_data['playerBodyX'] ,sim_data['playerBodyY'], sim_data['playerBodyZ']
+        d_x, d_z = destination[0], destination[1]
+        distance = np.sqrt((x - d_x)**2 + (z - d_z)**2)
+        # 각도 sin, cos 화 및 위치와 속도 정규화
+        x, y, z, speed = x / 300, y / 300, z / 300, speed / 100
+        b_x_sin, b_x_cos = change_degree(b_x)
+        b_y_sin, b_y_cos = change_degree(b_y)
+        b_z_sin, b_z_cos = change_degree(b_z)
+        d_x, d_z = d_x / 300, d_z / 300
+        if distance < 24:
+            result = True
+            print('Tank is arrived')
+            sensor_data_for_reset = np.array([x,y,z,speed,b_x_sin,b_x_cos,b_y_sin,b_y_cos,b_z_sin,b_z_cos])
+            destination_for_reset = np.array([d_x, d_z])
+            env.reset(options={'sensor_data': sensor_data_for_reset, 'goal_position': destination_for_reset})
+            return jsonify({"move": "STOP", 'weight': 1.0})
         else:
-            print(f'No Enemy. Moving Command: {command}')
-        return jsonify(command)
+            result = False
+        # PPO Agent 값 입력
+        data = {
+        'sensor_data': torch.tensor([x,y,z,speed,b_x_sin, b_x_cos, b_y_sin, b_y_cos, b_z_sin, b_z_cos], dtype=torch.float32).unsqueeze(0).to(device),
+        'goal_position': torch.tensor([d_x, d_z], dtype=torch.float32).unsqueeze(0).to(device)
+        }
+        # env.step() 수행 시 꺼내서 조회할 데이터
+        data_np = {'sensor_data': data['sensor_data'].cpu(), 'goal_position': data['goal_position'].cpu()}
+        ppo.stack_data(data_np, result, distance)
+        # PPO Agent 행동 도출 
+        with torch.no_grad():
+            action, value, log_prob = model.policy(data, deterministic=True)
+        action_1 = number_to_command[action.detach().cpu().numpy()[0][0]]
+        action_2 = weight_bins[action.detach().cpu().numpy()[0][1]]
+        print('PPO Agent is making decisions')
+
+        # Command 반환
+        command = {"move": action_1, "weight": action_2} # 규칙 기반 출력 값
+        
+        # 적 발견에 따른 행동 분기 
+        if enemy_detected and preemptive_strike:
+            weight = 0.1
+            enemies = len(enemy_list)
+            if enemies == 0:
+                print('enemy detected but enemy list is empty')
+                return jsonify({"move": "STOP", 'weight': weight})
+            if enemies > 0:
+                # 사정거리 안에 있으면 그 자리에서 멈춰서 쏘자
+                distance = enemy_list[0]['distance']
+                if distance < 105:
+                    print('enemy in range. tank stop')
+                    return jsonify({"move": "STOP", 'weight': weight})
+                else:
+                    x = sim_data['playerPos']['x']
+                    y = sim_data['playerPos']['y']
+                    z = sim_data['playerPos']['z']
+                    turret_x = sim_data['playerTurretX']
+                    enemy_x, enemy_z = get_target_coord(x, z, turret_x, distance)
+                    if destination_buffer == 0:
+                        destination = [enemy_x, enemy_z]
+                        print(f'Destination has been changed: {enemy_x},{y},{enemy_z}')
+                        destination_buffer += 1
+                    else:
+                        destination_buffer += 1
+                        if destination_buffer > 64:
+                            destination_buffer = 0
+                    command['weight'] = weight
+                    print('enemy detected but out of range.')
+                    return jsonify(command)
+        else:
+            if enemy_suspected and preemptive_strike:
+                command['weight'] = 0.05
+                print(f'Enemy suspected. Moving Command: {command}')
+            else:
+                print(f'No Enemy. Moving Command: {command}')
+            return jsonify(command)
+
+    # 강화학습 모델 미 사용 시
+    else:
+        if enemy_detected and preemptive_strike:
+            weight = 0.1
+            enemies = len(enemy_list)
+            if enemies == 0:
+                print('enemy detected but enemy list is empty')
+                return jsonify({"move": "STOP", 'weight': weight})
+            if enemies > 0:
+                # 사정거리 안에 있으면 그 자리에서 멈춰서 쏘자
+                distance = enemy_list[0]['distance']
+                if distance < 105:
+                    print('enemy in range. tank stop')
+                    return jsonify({"move": "STOP", 'weight': weight})
+                else:
+                    x = sim_data['playerPos']['x']
+                    y = sim_data['playerPos']['y']
+                    z = sim_data['playerPos']['z']
+                    turret_x = sim_data['playerTurretX']
+                    enemy_x, enemy_z = get_target_coord(x, z, turret_x, distance)
+                    if destination_buffer == 0:
+                        nav_controller.set_destination(f'{enemy_x},{y},{enemy_z}')
+                        print(f'Destination has been changed: {enemy_x},{y},{enemy_z}')
+                        destination_buffer += 1
+                    else:
+                        destination_buffer += 1
+                        if destination_buffer > 64:
+                            destination_buffer = 0
+                    command = nav_controller.get_move()
+                    command['weight'] = weight
+                    print('enemy detected but out of range.')
+                    return jsonify(command)
+        else:
+            command = nav_controller.get_move()
+            if enemy_suspected and preemptive_strike:
+                command['weight'] = 0.05
+                print(f'Enemy suspected. Moving Command: {command}')
+            else:
+                print(f'No Enemy. Moving Command: {command}')
+            return jsonify(command)
 
 @app.route('/get_action', methods=['GET'])
 def get_action():
@@ -264,8 +332,8 @@ def get_action():
     global turret_rotate
     global enemy_list
     data = shared_data.get_data()
-    turret_x = change_degree(data['playerTurretX'])
-    body_x =  change_degree(data['playerBodyX'])
+    turret_x = change_turret_degree(data['playerTurretX'])
+    body_x =  change_turret_degree(data['playerBodyX'])
     heading = turret_x - body_x
     if heading > 30:
         turret_rotate = 'Q'
@@ -307,21 +375,24 @@ def get_action():
 @app.route('/init', methods=['GET'])
 def init():
     global rng
-    global final_destination
+    global destination
     global is_env_start
     global trail
 
     with threading_lock:
         while True:
-            random_coord = rng.integers(low=30, high=270, size=4)
+            random_coord = rng.integers(low=20, high=130, size=4)
+            random_coord2 = rng.integers(low=170, high=280, size=4)
             x = int(random_coord[0])
             z = int(random_coord[1])
-            des_x = int(random_coord[2])
-            des_z = int(random_coord[3])
+            des_x = int(random_coord2[0])
+            des_z = int(random_coord2[1])
 
             distance = np.sqrt((x - des_x) ** 2 + (z - des_z) ** 2)
             if (distance > 40) and (des_x > 5 and des_x < 295 and des_z > 5 and des_z < 295):
                 break
+        # 초기 목적지를 탱크의 생성 위치로 설정 
+        destination = [x, z]
 
         config = {
             "startMode": "start",  # Options: "start" or "pause"
@@ -397,13 +468,27 @@ def set_goal():
     global destination
     global preemptive_strike
     data = request.get_json()
-    print(data)
+    sim_data = shared_data.get_data()
     x = data['x']
     z = 300 - data['z']
     preemptive_strike = data['preemptive']
     destination = [x, z]
-    result = nav_controller.set_destination(f'{x},10,{z}')
-    print(result)
+
+    nav_controller.set_destination(f'{x},10,{z}')
+    x, y, z = sim_data['playerPos']['x'], sim_data['playerPos']['y'], sim_data['playerPos']['z']
+    speed, t_x, t_y  = sim_data['playerSpeed'], sim_data['playerTurretX'], sim_data['playerTurretY']
+    b_x, b_y, b_z = sim_data['playerBodyX'] ,sim_data['playerBodyY'], sim_data['playerBodyZ']
+    d_x, d_z = destination[0], destination[1]
+    # 각도 sin, cos 화 및 위치와 속도 정규화
+    x, y, z, speed = x / 300, y / 300, z / 300, speed / 100
+    b_x_sin, b_x_cos = change_degree(b_x)
+    b_y_sin, b_y_cos = change_degree(b_y)
+    b_z_sin, b_z_cos = change_degree(b_z)
+    d_x, d_z = d_x / 300, d_z / 300
+    sensor_data_for_reset = np.array([x,y,z,speed,b_x_sin,b_x_cos,b_y_sin,b_y_cos,b_z_sin,b_z_cos])
+    destination_for_reset = np.array([d_x, d_z])
+    env.reset(options={'sensor_data': sensor_data_for_reset, 'goal_position': destination_for_reset})
+
     return jsonify({'result': 'success'}), 200
 
 
@@ -415,4 +500,6 @@ def start():
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5055, debug=True)
+    device = ppo.init_device()
+    model, env = ppo.initialize_ppo()
+    app.run(host='0.0.0.0', port=5055, debug=False)
