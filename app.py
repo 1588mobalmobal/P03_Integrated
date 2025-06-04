@@ -4,6 +4,8 @@ import threading
 import math
 import numpy as np
 import threading
+from array import array
+from collections import deque
 
 import segformer_b0 as seg
 import path_finding as pf
@@ -12,6 +14,7 @@ import firing as fire
 from utils import shared_data
 from collections import deque
 import torch
+
 
 app = Flask(__name__)
 
@@ -60,6 +63,9 @@ latest_result = os.path.join(result_dir, "latest_result.png")
 
 # 평시 정찰 코드
 turret_rotate = 'Q'
+distance_buffer = deque(maxlen=20)
+for i in range(20):
+    distance_buffer.append(999)
 
 # destination 공유 코드
 destination = None
@@ -205,6 +211,7 @@ def get_move():
     global destination_buffer
     global destination
     global step_counter
+    global distance_buffer
     sim_data = shared_data.get_data()
     step_counter += 1
     # 강화학습 모델 사용 시 
@@ -256,26 +263,29 @@ def get_move():
                 return jsonify({"move": "STOP", 'weight': weight})
             if enemies > 0:
                 # 사정거리 안에 있으면 그 자리에서 멈춰서 쏘자
-                distance = enemy_list[0]['distance']
-                if distance < 105:
+                e_distance = enemy_list[0]['distance']
+                distance_buffer.append(e_distance)
+                distance = np.mean(distance_buffer)
+                if distance < 90:
                     print('enemy in range. tank stop')
                     return jsonify({"move": "STOP", 'weight': weight})
                 else:
-                    x = sim_data['playerPos']['x']
-                    y = sim_data['playerPos']['y']
-                    z = sim_data['playerPos']['z']
-                    turret_x = sim_data['playerTurretX']
-                    enemy_x, enemy_z = get_target_coord(x, z, turret_x, distance)
-                    if destination_buffer == 0:
-                        destination = [enemy_x, enemy_z]
-                        print(f'Destination has been changed: {enemy_x},{y},{enemy_z}')
-                        destination_buffer += 1
-                    else:
-                        destination_buffer += 1
-                        if destination_buffer > 64:
-                            destination_buffer = 0
-                    command['weight'] = weight
-                    print('enemy detected but out of range.')
+                    # x = sim_data['playerPos']['x']
+                    # y = sim_data['playerPos']['y']
+                    # z = sim_data['playerPos']['z']
+                    # turret_x = sim_data['playerTurretX']
+                    # enemy_x, enemy_z = get_target_coord(x, z, turret_x, distance)
+                    # if destination_buffer == 0:
+                    #     destination = [enemy_x, enemy_z]
+                    #     print(f'Destination has been changed: {enemy_x},{y},{enemy_z}')
+                    #     destination_buffer += 1
+                    # else:
+                    #     destination_buffer += 1
+                    #     if destination_buffer > 64:
+                    #         destination_buffer = 0
+                    # # command['weight'] = weight
+                    # # command['move'] = 'W'
+                    # print('enemy detected but out of range.')
                     return jsonify(command)
         else:
             if enemy_suspected and preemptive_strike:
@@ -467,11 +477,16 @@ def get_visualization():
 def set_goal():
     global destination
     global preemptive_strike
+    global use_reinforecement_model
     data = request.get_json()
     sim_data = shared_data.get_data()
     x = data['x']
     z = 300 - data['z']
     preemptive_strike = data['preemptive']
+    if preemptive_strike:
+        use_reinforecement_model = False
+    else:
+        use_reinforecement_model = True
     destination = [x, z]
 
     nav_controller.set_destination(f'{x},10,{z}')
